@@ -78,7 +78,7 @@ class Fighter:
 
 class Level:
     def __init__(self, player_character: Dict):
-        self.round_time = 99
+        self.round_time = 30
         self.current_time = self.round_time
         self.timer_active = True
 
