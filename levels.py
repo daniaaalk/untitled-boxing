@@ -3,9 +3,8 @@ import sys
 from pygame import mixer
 from typing import Tuple, Dict
 import math
-from PIL import Image  # For loading GIF frames
+from PIL import Image
 
-# Initialize Pygame
 pygame.init()
 mixer.init()
 
@@ -21,13 +20,14 @@ BLUE = (0, 81, 255)
 YELLOW = (255, 204, 0)
 GREEN = (0, 255, 0)
 PURPLE = (147, 0, 211)
+BLACK = (0, 0, 0)
 
-# Initialize window
+# Initialize screen
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
-pygame.display.set_caption("Ultimate Boxing Championship II - Level 1")
+pygame.display.set_caption("Ultimate Boxing Championship II")
 clock = pygame.time.Clock()
 
-# Load fonts
+# Fonts
 try:
     game_font = pygame.font.Font("assets/PressStart2P-Regular.ttf", 24)
     timer_font = pygame.font.Font("assets/PressStart2P-Regular.ttf", 48)
@@ -35,24 +35,33 @@ except:
     game_font = pygame.font.SysFont("Arial", 24)
     timer_font = pygame.font.SysFont("Arial", 48)
 
+# Load music
+try:
+    mixer.music.load("assets/music/fight_theme.mp3")
+    mixer.music.play(-1)
+except:
+    print("Music file could not be loaded.")
+
 # Function to load and resize GIF frames
-def load_gif_frames(gif_path: str, size: Tuple[int, int]) -> list:
+def load_gif_frames(path: str, size: Tuple[int, int]) -> list:
     frames = []
     try:
-        pil_image = Image.open(gif_path)
-        for frame in range(pil_image.n_frames):
-            pil_image.seek(frame)
-            frame_image = pil_image.convert("RGB").resize(size)
-            mode = frame_image.mode
-            data = frame_image.tobytes()
-            surface = pygame.image.fromstring(data, frame_image.size, mode)
+        img = Image.open(path)
+        for frame in range(img.n_frames):
+            img.seek(frame)
+            frame_img = img.convert("RGB").resize(size)
+
+            mode = frame_img.mode
+            data = frame_img.tobytes()
+            surface = pygame.image.fromstring(data, frame_img.size, mode)  # use resized size here
             frames.append(surface)
     except Exception as e:
-        print(f"Error loading GIF: {e}")
+        print(f"Error loading GIF frames from: {path}\n{e}")
     return frames
 
+
 class Fighter:
-    def __init__(self, name: str, color: Tuple[int, int, int], position: Tuple[int, int]):
+    def __init__(self, name, color, position):
         self.name = name
         self.color = color
         self.position = position
@@ -61,40 +70,42 @@ class Fighter:
         self.rounds_won = 0
         self.is_blocking = False
         self.aura_charging = False
-        self.aura_effect_timer = 0
+        self.aura_timer = 0
 
     def draw(self):
         fighter_rect = pygame.Rect(self.position[0], self.position[1], 100, 200)
         pygame.draw.rect(screen, self.color, fighter_rect)
-
         if self.aura_charging:
-            self.aura_effect_timer = (self.aura_effect_timer + 1) % 360
+            self.aura_timer = (self.aura_timer + 1) % 360
             for i in range(0, 360, 30):
-                angle = math.radians(i + self.aura_effect_timer)
-                radius = 60
-                x = self.position[0] + 50 + radius * math.cos(angle)
-                y = self.position[1] + 100 + radius * math.sin(angle)
+                angle = math.radians(i + self.aura_timer)
+                x = self.position[0] + 50 + 60 * math.cos(angle)
+                y = self.position[1] + 100 + 60 * math.sin(angle)
                 pygame.draw.circle(screen, PURPLE, (int(x), int(y)), 5)
 
 class Level:
-    def __init__(self, player_character: Dict):
-        self.round_time = 30
+    def __init__(self, player, opponent_name, opponent_color, bg_path=None):
+        self.round_time = 5
         self.current_time = self.round_time
         self.timer_active = True
 
-        self.player = Fighter(player_character["name"], player_character["color"], (200, 400))
-        self.opponent = Fighter("CPU", RED, (900, 400))
+        self.player = Fighter(player["name"], player["color"], (200, 400))
+        self.opponent = Fighter(opponent_name, opponent_color, (900, 400))
 
-        # Load animated GIF background
-        self.bg_frames = load_gif_frames("assets/background/underground.gif", (WINDOW_WIDTH, WINDOW_HEIGHT))
-        self.current_frame = 0
-        self.frame_timer = 0
+        # Background
+        self.bg_frames = load_gif_frames(bg_path, (WINDOW_WIDTH, WINDOW_HEIGHT)) if bg_path else []
+        self.bg_index = 0
+        self.bg_timer = 0
 
-        try:
-            mixer.music.load("assets/music/fight_theme.mp3")
-            mixer.music.play(-1)
-        except:
-            print("Background music could not be loaded")
+    def draw_background(self):
+        if self.bg_frames:
+            self.bg_timer += 1
+            if self.bg_timer >= 10:
+                self.bg_timer = 0
+                self.bg_index = (self.bg_index + 1) % len(self.bg_frames)
+            screen.blit(self.bg_frames[self.bg_index], (0, 0))
+        else:
+            screen.fill(BLACK)  # Placeholder if background is missing
 
     def draw_health_bars(self):
         pygame.draw.rect(screen, RED, (50, 50, 400, 30))
@@ -125,33 +136,20 @@ class Level:
         for i in range(self.opponent.rounds_won):
             pygame.draw.circle(screen, YELLOW, (1150 - i * 30, 130), 10)
 
-    def update_background(self):
-        if self.bg_frames:
-            self.frame_timer += 1
-            if self.frame_timer >= 10:  # Adjust speed
-                self.frame_timer = 0
-                self.current_frame = (self.current_frame + 1) % len(self.bg_frames)
-            screen.blit(self.bg_frames[self.current_frame], (0, 0))
-        else:
-            screen.fill((0, 0, 0))
-
     def run(self):
         running = True
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-
-                if event.type == pygame.KEYDOWN:
+                    pygame.quit(); sys.exit()
+                elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         running = False
                     elif event.key == pygame.K_SPACE:
                         self.player.is_blocking = True
                     elif event.key == pygame.K_LSHIFT:
                         self.player.aura_charging = True
-
-                if event.type == pygame.KEYUP:
+                elif event.type == pygame.KEYUP:
                     if event.key == pygame.K_SPACE:
                         self.player.is_blocking = False
                     elif event.key == pygame.K_LSHIFT:
@@ -160,7 +158,7 @@ class Level:
             if self.timer_active and self.current_time > 0:
                 self.current_time -= 1 / FPS
 
-            self.update_background()
+            self.draw_background()
             self.player.draw()
             self.opponent.draw()
             self.draw_health_bars()
@@ -168,22 +166,71 @@ class Level:
             self.draw_timer()
             self.draw_round_wins()
 
+                        # Check if time ran out
+            if self.current_time <= 0:
+                self.timer_active = False
+                win_text = game_font.render("You win! Press ENTER to continue...", True, WHITE)
+                screen.blit(win_text, (WINDOW_WIDTH // 2 - 250, WINDOW_HEIGHT // 2))
+                pygame.display.flip()
+
+                waiting = True
+                while waiting:
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            pygame.quit(); sys.exit()
+                        elif event.type == pygame.KEYDOWN:
+                            if event.key == pygame.K_RETURN:
+                                return True
+                            elif event.key == pygame.K_ESCAPE:
+                                pygame.quit(); sys.exit()
+                    clock.tick(FPS)
+
             pygame.display.flip()
             clock.tick(FPS)
 
-def start_level_one(player_character):
-    level = Level(player_character)
-    return level.run()
+        return True
+
+
+def play_cutscene():
+    screen.fill(BLACK)
+    text_lines = [
+        "After defeating your first opponent...",
+        "You prepare for the ultimate showdown.",
+        "Next Opponent: SHADOW VIPER.",
+        "Press ENTER to continue or ESC to quit."
+    ]
+    for i, line in enumerate(text_lines):
+        text = game_font.render(line, True, WHITE)
+        screen.blit(text, (100, 250 + i * 40))
+    pygame.display.flip()
+
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    return True
+                elif event.key == pygame.K_ESCAPE:
+                    return False
+
+def main_game():
+    player_data = {
+        "name": "CRUSHER",
+        "color": BLUE
+    }
+
+    # Level 1
+    level1 = Level(player_data, "CPU", RED, bg_path="assets/background/underground.gif")
+    level1.run()
+
+    # Cutscene & transition
+    if play_cutscene():
+        # Level 2 with placeholder background
+        level2 = Level(player_data, "SHADOW VIPER", PURPLE, bg_path=None)  # Placeholder
+        level2.run()
+    else:
+        print("Player chose not to continue.")
 
 if __name__ == "__main__":
-    test_character = {
-        "name": "CRUSHER",
-        "color": BLUE,
-        "stats": {
-            "POWER": 9,
-            "SPEED": 5,
-            "STAMINA": 7,
-            "TECHNIQUE": 6
-        }
-    }
-    start_level_one(test_character)
+    main_game()
